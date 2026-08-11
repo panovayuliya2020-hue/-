@@ -43,22 +43,17 @@ function mergeDaily(sourceResults) {
     .map(([date, amount]) => ({ date, amount }));
 }
 
-// Продамус шлёт вебхук на каждую оплату — здесь его принимаем, проверяем
-// подпись (best-effort: точная схема подтвердится на первом реальном
-// событии) и копим сырые данные локально, разбор полей уточним по логам.
-function verifyProdamusSignature(fields, secretKey) {
-  if (!fields || !fields.signature || !secretKey) return 'unknown';
-  const { signature, ...rest } = fields;
-  const sorted = Object.keys(rest)
-    .filter((k) => rest[k] !== undefined && rest[k] !== '')
-    .sort();
-  const base = sorted.map((k) => `${k}=${rest[k]}`).join('&');
-  const computed = crypto.createHmac('sha256', secretKey).update(base).digest('hex');
-  return computed === signature ? 'valid' : 'invalid';
+// Продамус шлёт вебхук на каждую оплату — здесь его принимаем и копим сырые
+// данные локально. Подпись приходит в заголовке Sign, но точный алгоритм её
+// расчёта не задокументирован публично и подбором не нашёлся (проверено
+// несколько вариантов на реальном событии) — поэтому не блокируем приём по
+// ней, только помечаем как "не проверено".
+function verifyProdamusSignature(signatureHeader) {
+  return signatureHeader ? 'not_verified' : 'missing';
 }
 
 function extractSaleFields(parsed) {
-  if (!parsed) return { amount: null, date: null, status: null };
+  if (!parsed) return { amount: null, date: null, status: null, isTest: false };
   const amount = parsed.sum ?? parsed.amount ?? parsed.order_sum ?? parsed.payment_amount;
   const rawDate = parsed.date ?? parsed.payment_date ?? parsed.order_date ?? parsed.created_at;
   const status = parsed.payment_status ?? parsed.status ?? parsed.order_status ?? null;
@@ -66,6 +61,7 @@ function extractSaleFields(parsed) {
     amount: amount != null && amount !== '' ? Number(amount) : null,
     date: rawDate ? String(rawDate).slice(0, 10) : null,
     status,
+    isTest: parsed.sys === 'test',
   };
 }
 
@@ -82,8 +78,8 @@ app.post('/webhooks/prodamus', express.raw({ type: () => true, limit: '1mb' }), 
     parsed = null;
   }
 
-  const signatureStatus = verifyProdamusSignature(parsed, process.env.PRODAMUS_SECRET_KEY);
-  const { amount, date, status } = extractSaleFields(parsed);
+  const signatureStatus = verifyProdamusSignature(req.headers['sign']);
+  const { amount, date, status, isTest } = extractSaleFields(parsed);
 
   prodamusStore.append({
     receivedAt: new Date().toISOString(),
@@ -92,6 +88,7 @@ app.post('/webhooks/prodamus', express.raw({ type: () => true, limit: '1mb' }), 
     amount,
     date,
     status,
+    isTest,
     parsed,
     raw,
   });

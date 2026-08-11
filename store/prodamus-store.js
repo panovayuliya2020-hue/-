@@ -31,6 +31,8 @@ function summary({ dateFrom, dateTo }) {
 
   for (const ev of events) {
     if (ev.amount == null || !ev.date) continue;
+    if (ev.isTest) continue; // тестовые уведомления из личного кабинета — не реальные деньги
+    if (ev.status && ev.status !== 'success') continue; // считаем только успешные оплаты
     if (ev.date < dateFrom || ev.date > dateTo) continue;
     total += ev.amount;
     salesCount += 1;
