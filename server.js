@@ -7,6 +7,7 @@ const youtube = require('./connectors/youtube');
 const vk = require('./connectors/vk');
 const instagram = require('./connectors/instagram');
 const telegram = require('./connectors/telegram');
+const max = require('./connectors/max');
 const tochka = require('./connectors/tochka');
 const tinkoff = require('./connectors/tinkoff');
 const sberbank = require('./connectors/sberbank');
@@ -109,7 +110,7 @@ app.get('/webhooks/prodamus/debug', (req, res) => {
 app.get('/api/overview', async (req, res) => {
   const range = monthRange();
 
-  const [prodamusRes, tochkaRes, tinkoffRes, sberbankRes, youtubeRes, vkRes, instagramRes, telegramRes] = await Promise.all([
+  const [prodamusRes, tochkaRes, tinkoffRes, sberbankRes, youtubeRes, vkRes, instagramRes, telegramRes, maxRes] = await Promise.all([
     Promise.resolve(prodamusStore.summary(range)),
     tochka.getMonthSummary(range),
     tinkoff.getMonthSummary(range),
@@ -131,12 +132,16 @@ app.get('/api/overview', async (req, res) => {
       botToken: process.env.TELEGRAM_BOT_TOKEN,
       channelUsername: process.env.TELEGRAM_CHANNEL_USERNAME,
     }),
+    max.getChannelStats({
+      token: process.env.MAX_BOT_TOKEN,
+      chatId: process.env.MAX_CHAT_ID,
+    }),
   ]);
 
   const moneySources = [prodamusRes, tochkaRes, tinkoffRes, sberbankRes];
   const totalThisMonth = moneySources.reduce((sum, r) => sum + (r.ok ? r.totalThisMonth : 0), 0);
 
-  const channels = [youtubeRes, vkRes, instagramRes, telegramRes];
+  const channels = [youtubeRes, vkRes, instagramRes, telegramRes, maxRes];
   const totalSubscribers = channels.reduce((sum, c) => sum + (c.ok ? c.subscribers : 0), 0);
 
   res.json({
