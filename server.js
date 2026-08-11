@@ -5,6 +5,7 @@ const cors = require('cors');
 
 const youtube = require('./connectors/youtube');
 const vk = require('./connectors/vk');
+const instagram = require('./connectors/instagram');
 const tochka = require('./connectors/tochka');
 const tinkoff = require('./connectors/tinkoff');
 const sberbank = require('./connectors/sberbank');
@@ -107,7 +108,7 @@ app.get('/webhooks/prodamus/debug', (req, res) => {
 app.get('/api/overview', async (req, res) => {
   const range = monthRange();
 
-  const [prodamusRes, tochkaRes, tinkoffRes, sberbankRes, youtubeRes, vkRes] = await Promise.all([
+  const [prodamusRes, tochkaRes, tinkoffRes, sberbankRes, youtubeRes, vkRes, instagramRes] = await Promise.all([
     Promise.resolve(prodamusStore.summary(range)),
     tochka.getMonthSummary(range),
     tinkoff.getMonthSummary(range),
@@ -121,12 +122,16 @@ app.get('/api/overview', async (req, res) => {
       token: process.env.VK_ACCESS_TOKEN,
       groupId: process.env.VK_GROUP_ID,
     }),
+    instagram.getAccountStats({
+      token: process.env.INSTAGRAM_ACCESS_TOKEN,
+      igUserId: process.env.INSTAGRAM_USER_ID,
+    }),
   ]);
 
   const moneySources = [prodamusRes, tochkaRes, tinkoffRes, sberbankRes];
   const totalThisMonth = moneySources.reduce((sum, r) => sum + (r.ok ? r.totalThisMonth : 0), 0);
 
-  const channels = [youtubeRes, vkRes];
+  const channels = [youtubeRes, vkRes, instagramRes];
   const totalSubscribers = channels.reduce((sum, c) => sum + (c.ok ? c.subscribers : 0), 0);
 
   res.json({
